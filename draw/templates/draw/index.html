@@ -9,7 +9,7 @@
     <link rel="stylesheet" type="text/css" href="{% static 'draw/vendor/bootstrap/css/bootstrap.min.css' %}">
     <script type="text/javascript" src="{% static 'draw/vendor/jquery/jquery-3.3.1.min.js' %}"></script>
     <script type="text/javascript" src="{% static 'draw/vendor/paper/paper-full.min.js' %}"></script>
-
+    <script type="text/javascript" src="https://cdn.rawgit.com/alexgibson/shake.js/master/shake.js"></script>
     <style type="text/css">
     </style>
 
@@ -24,12 +24,106 @@
     var canvas = document.getElementById('myCanvas');
     paper.setup(canvas);
     var tool = new paper.Tool();
+    var path = new paper.Path();
+    var thisDevice = false;
+    var colors = ['red', 'blue']
+    var user = null;
+    var otherUsers = [];
+    var otherColors = {};
+    var points = [];
+    var tilted = false;
+
+		// Define a mousedown and mousedrag handler
+		tool.onMouseDown = function(event) {
+			// path.add(event.point);
+      path = new paper.Path()
+      if (user == null) {
+        if (otherUsers.length === 0) {
+          user = 'master';
+          console.log('master instantiated');
+        } else {
+          user = 'user' + (otherUsers.length + 1);
+          console.log(user, 'instantiated');
+        }
+      }
+      if (tilted) {
+        path.strokeColor = 'red';
+      } else {
+        path.strokeColor = 'black';
+      }
+      points.push(event.point)
+      path.add(event.point)
+		}
+
+		tool.onMouseDrag = function(event) {
+			// path.add(event.point);
+      points.push(event.point)
+      path.add(event.point)
+		}
+    
+    tool.onMouseUp = function(event) {
+      var package = {
+        'user' : user,
+        'points': points
+      }
+      //socket.send(JSON.stringify(points));
+      thisDevice = true;
+      console.log(path)
+      socket.send(JSON.stringify(package));
+    }
 
     // getting the URL (you may want to use for Exercise 3)
     var url = window.location.href;
 
-    // var socket = new WebSocket(
-    //     'wss://<your url here>/ws/draw');
+    // create a new websocket connecting to the server
+    var socket = new WebSocket('wss://p3-websockets-Hiroaki0422-kifa0422499757.codeanyapp.com/ws/draw');
+
+    // triggered when receiving a message from the server
+    socket.onmessage = function(receivedMessage) {
+      // do something when you receive a message
+      
+      if (!thisDevice){
+        path = new paper.Path();
+        data = JSON.parse(receivedMessage.data);
+        var sender = data['user'];
+        if(!otherUsers.includes(sender)) {
+          otherUsers.push(sender);
+          otherColors[sender] = colors[otherUsers.length % 2];
+        }
+        if (user === 'master') {
+            points = data['points'];
+            path.strokeColor = otherColors[sender]
+            for (x in points){
+              path.add(new paper.Point(points[x][1], points[x][2]))
+            }
+        }
+      }
+      points = [];
+      thisDevice = false;
+    };
+  
+    var shakeEvent = new Shake({threshold: 15});
+    shakeEvent.start();
+    window.addEventListener('shake', function(){
+        const context = canvas.getContext('2d');
+        context.clearRect(0, 0, canvas.width, canvas.height);
+    }, false);
+  
+    window.addEventListener('deviceorientation', (event) =>{
+      if (event.gamma > 30) {
+        tilted = true;
+      }
+      
+    })
+    // use when sending a message to the server
+    // to be broadcasted to all clients, please add a delay
+    // socket.send(message);
+
+    // notify console if socket closes unexpectedly
+    socket.onclose = function(e) {
+        console.error('Chat socket closed unexpectedly');
+    };
+
 
 
 </script>
